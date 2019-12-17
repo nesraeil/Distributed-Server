@@ -4,6 +4,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class UDPMessageReceiver implements Runnable
@@ -13,10 +14,16 @@ public class UDPMessageReceiver implements Runnable
     private final int myPort;
     private LinkedBlockingQueue<Message> incomingMessages;
     private volatile boolean shutdown = false;
+    LinkedBlockingQueue<Message> incomingHeartGossip;
+    HashSet<String> deadServers;
 
-    public UDPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages, InetSocketAddress myAddress,int myPort)
+    public UDPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages,
+                              LinkedBlockingQueue<Message> incomingHeartGossip,
+                              HashSet<String> deadServers,
+                              InetSocketAddress myAddress,int myPort)
     {
         this.incomingMessages = incomingMessages;
+        this.incomingHeartGossip = incomingHeartGossip;
         this.myAddress = myAddress;
         this.myPort = myPort;
     }
@@ -49,7 +56,15 @@ public class UDPMessageReceiver implements Runnable
                 DatagramPacket packet = new DatagramPacket(new byte[MAXLENGTH], MAXLENGTH);
                 socket.receive(packet); // Receive packet from a client
                 Message received = new Message(packet.getData());
-                this.incomingMessages.put(received);
+                //Ignores all messages from servers that are in the dead list
+                if(!deadServers.contains(received.getSenderHost() + received.getSenderPort())) {
+                    if(received.getMessageType() == Message.MessageType.HEARTBEAT || received.getMessageType() == Message.MessageType.GOSSIP) {
+                        this.incomingHeartGossip.put(received);
+                    } else {
+                        this.incomingMessages.put(received);
+                    }
+                }
+
             }
             catch(SocketTimeoutException ste)
             {

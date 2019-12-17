@@ -2,6 +2,7 @@ package edu.yu.cs.fall2019.intro_to_distributed;
 
 import java.net.InetSocketAddress;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static edu.yu.cs.fall2019.intro_to_distributed.Util.startAsDaemon;
@@ -12,17 +13,28 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     private final int myPort;
     private ServerState state;
     private volatile boolean shutdown;
-    private LinkedBlockingQueue<Message> outgoingMessages;
-    private LinkedBlockingQueue<Message> incomingMessages;
+
+    private LinkedBlockingQueue<Message> outgoingUDP;
+    private LinkedBlockingQueue<Message> incomingUDP;
+    private UDPMessageSender senderWorkerUDP;
+    private UDPMessageReceiver receiverWorkerUDP;
+    private LinkedBlockingQueue<Message> outgoingTCP;
+    private LinkedBlockingQueue<Message> incomingTCP;
+    private TCPMessageSender senderWorkerTCP;
+    private TCPMessageReceiver receiverWorkerTCP;
+    private LinkedBlockingQueue<Message> incomingHeartGossip;
+    private LinkedBlockingQueue<Message> incomingGossip;
+
     private Long id;
     private long peerEpoch;
     private volatile Vote currentLeader;
     private HashMap<Long,InetSocketAddress> peerIDtoAddress;
-    private UDPMessageSender senderWorker;
-    private UDPMessageReceiver receiverWorker;
     private int requestID;
     private JavaRunnerFollower follower;
     private RoundRobinLeader leader;
+
+    private HashSet<String> deadServers;//host+port
+    private Heartbeat heart;
 
     ZooKeeperPeerServerImpl(int myPort, long peerEpoch, Long id, HashMap<Long,InetSocketAddress> peerIDtoAddress)
     {
@@ -31,20 +43,38 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         this.id = id;
         this.peerIDtoAddress = peerIDtoAddress;
         this.myAddress = new InetSocketAddress("localhost", myPort);//Check this
-        this.outgoingMessages = new LinkedBlockingQueue<>();//Check this
-        this.incomingMessages = new LinkedBlockingQueue<>();//Check this
-        this.senderWorker = new UDPMessageSender(this.outgoingMessages);//Check this
-        this.receiverWorker = new UDPMessageReceiver(this.incomingMessages,this.myAddress,this.myPort);//Check this
-        this.state = ServerState.LOOKING;//Should i set my state here
-        requestID = 0;
+
+        //Hearbeat and gossip incoming queues
+        this.incomingHeartGossip = new LinkedBlockingQueue<>();
+
+        deadServers = new HashSet<>();
+
+        //UDP Stuff
+        this.outgoingUDP = new LinkedBlockingQueue<>();
+        this.incomingUDP = new LinkedBlockingQueue<>();
+        this.senderWorkerUDP = new UDPMessageSender(this.outgoingUDP);
+        this.receiverWorkerUDP = new UDPMessageReceiver(this.incomingUDP,this.incomingHeartGossip,deadServers, this.myAddress,this.myPort);
+
+        //TCP Stuff
+        this.outgoingTCP = new LinkedBlockingQueue<>();
+        this.incomingTCP = new LinkedBlockingQueue<>();
+        this.senderWorkerTCP = new TCPMessageSender(this.outgoingTCP);
+        this.receiverWorkerTCP = new TCPMessageReceiver(this.incomingTCP, this.myPort);
+
+        this.state = ServerState.LOOKING;
+        this.requestID = 0;
+
+        heart = new Heartbeat(this, incomingHeartGossip, deadServers, peerIDtoAddress);
     }
 
     @Override
     public void shutdown()
     {
-        this.shutdown = true;
-        this.senderWorker.shutdown();
-        this.receiverWorker.shutdown();
+        shutdown = true;
+        senderWorkerUDP.shutdown();
+        receiverWorkerUDP.shutdown();
+        senderWorkerTCP.shutdown();
+        receiverWorkerTCP.shutdown();
         if(follower != null) {
             follower.shutdown();
         }
@@ -58,28 +88,31 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     public void run()
     {
         //step 1: create and start thread that sends broadcast messages
-        startAsDaemon(senderWorker, "sender thread for " + this.myAddress.getPort());
+        startAsDaemon(senderWorkerUDP, "sender thread for " + this.myAddress.getPort());
         //step 2: create and start thread that listens for messages sent to this server
-        startAsDaemon(receiverWorker, "receiving thread for " + this.myAddress.getPort());
+        startAsDaemon(receiverWorkerUDP, "receiving thread for " + this.myAddress.getPort());
         //step 3: main server loop
         try
         {
+            startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
+
             while (!this.shutdown)
             {
-
                 switch (getPeerState())
                 {
                     case OBSERVING:
                     case LOOKING:
                         //start leader election
+                        peerEpoch++;
                         setCurrentLeader(lookForLeader());
+                        peerEpoch = currentLeader.getPeerEpoch();
                         break;
                     case FOLLOWING:
-                        follower = new JavaRunnerFollower(this, incomingMessages, outgoingMessages);
+                        follower = new JavaRunnerFollower(this, incomingTCP, outgoingTCP);
                         follower.start();
                         break;
                     case LEADING:
-                        leader = new RoundRobinLeader(this, incomingMessages, outgoingMessages, peerIDtoAddress);
+                        leader = new RoundRobinLeader(this, incomingTCP, outgoingTCP, peerIDtoAddress);
                         leader.start();
                         break;
 
@@ -106,9 +139,17 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     //Check this
     @Override
     public void sendMessage(Message.MessageType type, byte[] messageContents, InetSocketAddress target) throws IllegalArgumentException {
-        requestID++;
-        Message m = new Message(type, messageContents, myAddress.getHostName(), myAddress.getPort(), target.getHostName(), target.getPort(), requestID);
-        outgoingMessages.offer(m);
+        if(this.state != ServerState.OBSERVING) {
+            requestID++;
+            Message m = new Message(type, messageContents, myAddress.getHostName(), myAddress.getPort(), target.getHostName(), target.getPort(), requestID);
+
+            if (type == Message.MessageType.ELECTION || type == Message.MessageType.HEARTBEAT || type == Message.MessageType.GOSSIP) {
+                outgoingUDP.offer(m);
+            } else {
+                outgoingTCP.offer(m);
+            }
+
+        }
     }
     //Check this
     @Override
@@ -162,13 +203,14 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     //Check this
     @Override
     public int getQuorumSize() {
-        return peerIDtoAddress.size();
+        //Subtract one for the Gateway
+        return peerIDtoAddress.size() - 1;
     }
 
     private Vote lookForLeader()
     {
 
-        ZooKeeperLeaderElection election = new ZooKeeperLeaderElection(this,this.incomingMessages);
+        ZooKeeperLeaderElection election = new ZooKeeperLeaderElection(this,this.incomingUDP);
         return election.lookForLeader();
     }
 

@@ -40,7 +40,7 @@ public class ZooKeeperLeaderElection {
         sendNotifications();
         //Loop, exchanging notifications with other servers until we find a leader
         Map<Long, Vote> votes = new HashMap<>();
-        while (this.myPeerServer.getPeerState() == LOOKING) {
+        while (this.myPeerServer.getPeerState() == LOOKING || this.myPeerServer.getPeerState() == OBSERVING) {
 
             //Remove next notification from queue, timing out after 2 times the termination time
             Message m = messageBackoff();
@@ -106,10 +106,10 @@ public class ZooKeeperLeaderElection {
     private ElectionNotification messageToElectNoti(Message m) {
         String[] contents = new String(m.getMessageContents()).split(" ");
         ElectionNotification electNoti = new ElectionNotification(
-                Long.parseLong(contents[0]),
-                ZooKeeperPeerServer.ServerState.valueOf(contents[1]),
-                Long.parseLong(contents[2]),
-                Long.parseLong(contents[3]));
+                Long.parseLong(contents[0]),//Proposed Leader
+                ZooKeeperPeerServer.ServerState.valueOf(contents[1]),// Sender's peer state
+                Long.parseLong(contents[2]),//Sender's server ID
+                Long.parseLong(contents[3]));//Sender's proposed epoch
 
         return electNoti;
     }
@@ -152,6 +152,7 @@ public class ZooKeeperLeaderElection {
             myPeerServer.setPeerState(FOLLOWING);
         }
         //clear out the incoming queue before returning
+
         incomingMessages.clear();
 
         return getVote();

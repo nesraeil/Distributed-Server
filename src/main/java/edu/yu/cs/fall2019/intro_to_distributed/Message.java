@@ -6,7 +6,7 @@ public class Message
 {
     public enum MessageType
     {
-        ELECTION,WORK,COMPLETED_WORK;
+        ELECTION,WORK,COMPLETED_WORK, HEARTBEAT, GOSSIP;
         public char getChar()
         {
             switch(this){
@@ -16,6 +16,10 @@ public class Message
                     return 'W';
                 case COMPLETED_WORK:
                     return 'C';
+                case HEARTBEAT:
+                    return  'H';
+                case GOSSIP:
+                    return 'G';
             }
             return 'z';
         }
@@ -28,6 +32,10 @@ public class Message
                     return WORK;
                 case 'C':
                     return COMPLETED_WORK;
+                case 'H':
+                    return HEARTBEAT;
+                case 'G':
+                    return GOSSIP;
             }
             return null;
         }

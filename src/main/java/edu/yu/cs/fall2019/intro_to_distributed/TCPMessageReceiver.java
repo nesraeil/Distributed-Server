@@ -12,7 +12,7 @@ public class TCPMessageReceiver implements Runnable{
     private volatile boolean shutdown = false;
     private int myPort;
 
-    public TCPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages, InetSocketAddress myAddress, int myPort) {
+    public TCPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages, int myPort) {
         this.incomingMessages = incomingMessages;
         this.myPort = myPort;
     }
