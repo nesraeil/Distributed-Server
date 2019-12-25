@@ -20,9 +20,9 @@ public class ZooKeeperLeaderElection {
 
     /**
      * Upper bound on the amount of time between two consecutive notification checks.
-     * This impacts the amount of time to get the system up again after long partitions. Currently 60 seconds.
+     * This impacts the amount of time to get the system up again after long partitions. Currently  seconds.
      */
-    private final static int maxNotificationInterval = 60000;
+    private final static int maxNotificationInterval = 10000;
 
     public ZooKeeperLeaderElection(ZooKeeperPeerServer server, LinkedBlockingQueue<Message> incomingMessages) {
         this.incomingMessages = incomingMessages;
@@ -46,10 +46,13 @@ public class ZooKeeperLeaderElection {
             Message m = messageBackoff();
 
             //if/when we get a message (removed: and it's from a valid server and for a valid server...)
+            //TODO also make sure we dont listen to messages from OBSERVER
             if(m != null && m.getMessageType() == Message.MessageType.ELECTION) {//GET BACK TO THIS
                 ElectionNotification electNoti = messageToElectNoti(m);
                 switch (electNoti.state) {
                     //switch on the state of the sender:
+                    case OBSERVING:
+                        break;
                     case LOOKING: //if the sender is also looking
                         //if the received message has a vote for a leader which supersedes mine, change my vote and tell all my peers what my new vote is...
                         if (newVoteSupersedesCurrent(electNoti.leader, electNoti.peerEpoch, proposedLeader, proposedEpoch)) {
@@ -117,19 +120,19 @@ public class ZooKeeperLeaderElection {
     private Message messageBackoff() {
         Message m = null;
         try {
-            m = incomingMessages.poll(maxNotificationInterval*2, TimeUnit.MILLISECONDS);//2* termination time?
+            m = incomingMessages.poll();
             if(m == null) {
                 //if no notifications received...
                 //...resend notifications to prompt a reply from others...
                 //..and implement exponential backoff when notifications not received...
                 sendNotifications();
-                int backoff = 1;
+                int backoff = 10;
                 while(m == null && backoff <= maxNotificationInterval) {
                     m = incomingMessages.poll(backoff, TimeUnit.MILLISECONDS);
                     backoff *= 2;
                 }
             }
-        } catch (java.lang.InterruptedException e) {
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
         return m;

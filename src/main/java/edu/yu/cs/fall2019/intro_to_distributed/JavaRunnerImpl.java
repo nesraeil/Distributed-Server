@@ -27,27 +27,29 @@ public class JavaRunnerImpl implements JavaRunner{
         outPath = sourceCodePath;
     }
 
-    public String compileAndRun(InputStream in) throws IllegalArgumentException, IOException {
-        String code = streamToString(in);
-        File source = createSource(code);
-
-
-        compile(source);
-        String output = run(code);
+    public String compileAndRun(InputStream is) throws IllegalArgumentException, IOException {
+        String output;
+        try{
+            String code = new String(Util.readAllBytes(is));
+            File source = createSource(code);
+            compile(source);
+            output = run(code);
+        } catch (Exception e) {
+            output = "400 error: " + e.getMessage();
+        }
         return output;
     }
 
     private String run(String code) throws IOException {
         String output = "";
-        ClassLoader loader = new URLClassLoader(new URL[]{outPath.toUri().toURL()});
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
 
-        PrintStream oldOut = System.out;
-        PrintStream oldErr = System.out;
+        synchronized (JavaRunner.class) {
+            ClassLoader loader = new URLClassLoader(new URL[]{outPath.toUri().toURL()});
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            ByteArrayOutputStream err = new ByteArrayOutputStream();
 
-        synchronized (JavaRunnerImpl.class) {
-
+            PrintStream oldOut = System.out;
+            PrintStream oldErr = System.out;
 
             try {
                 String pckg = getPackage(code);
@@ -69,15 +71,16 @@ public class JavaRunnerImpl implements JavaRunner{
             } catch (InvocationTargetException|IllegalArgumentException e) {
                 System.err.println(e.getCause().toString() + " on line "  +
                         e.getCause().getStackTrace()[0].getLineNumber() + " in " +
-                        e.getCause().getStackTrace()[0].getFileName() + ".");
+                        e.getCause().getStackTrace()[0].getClassName() + ".");
             } catch (NoSuchMethodException e) {//CONFIRM THAT THIS SHOULD BE HERE
                 System.err.println("Source code does not contain run() method.");
                 //throw new IllegalArgumentException("Source code does not contain run() method");
             } catch (Exception e) {
                 System.err.println("Unable to run source code.");
-                //throw new IllegalArgumentException("Unable to start src");
+                //e.printStackTrace();
             } finally {
                 output = "System.err:\n" + err + "\nSystem.out:\n" + out;
+                //output += code;
                 System.out.flush();
                 System.err.flush();
 
@@ -129,6 +132,7 @@ public class JavaRunnerImpl implements JavaRunner{
         return file;
     }
 
+    /*
     private String streamToString(InputStream in) throws IOException {
         StringBuilder result = new StringBuilder();
 
@@ -141,7 +145,7 @@ public class JavaRunnerImpl implements JavaRunner{
         }
         return result.toString();
     }
-
+*/
     private String getPackage(String input) {
         Pattern p = Pattern.compile("package\\s+([\\w\\.]+);");
         Matcher m = p.matcher(input);
@@ -161,4 +165,18 @@ public class JavaRunnerImpl implements JavaRunner{
             return "";
         }
     }
+
+    /*public static void main(String[] args) throws IOException {
+        JavaRunner test = new JavaRunnerImpl();
+        String code = "package edu.yu.cs.fall2019.intro_to_distributed.stage1;\n" +
+                "\n" +
+                "public class HelloWorld {\n" +
+                "\tpublic void run() {\n" +
+                "\t\tSystem.out.print(\"Hello System.out world!\\n\");\n" +
+                "\t\tSystem.err.print(\"Hello System.err world!\\n\");\n" +
+                "\t}\n" +
+                "}";
+        InputStream is = new ByteArrayInputStream(code.getBytes());
+        System.out.println(test.compileAndRun(is));
+    }*/
 }

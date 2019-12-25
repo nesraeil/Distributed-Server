@@ -9,7 +9,7 @@ public class Heartbeat implements Runnable {
 
     private ZooKeeperPeerServer myServer;
     private LinkedBlockingQueue<Message> incomingHeartbeat;
-    private HashSet<String> deadServers;//Identified by host + port
+    private HashSet<Long> deadServers;//Server IDs
     private HashMap<Long,InetSocketAddress> peerIDtoAddress;
     private HashMap<Long, HeartbeatData> serverTracker;
     private boolean shutdown;
@@ -25,7 +25,7 @@ public class Heartbeat implements Runnable {
 
     Heartbeat(ZooKeeperPeerServer myServer ,
               LinkedBlockingQueue<Message> incomingHeartGossip,
-              HashSet<String> deadServers,
+              HashSet<Long> deadServers,
               HashMap<Long,InetSocketAddress> peerIDtoAddress) {
         this.myServer = myServer;
         this.incomingHeartbeat = incomingHeartGossip;
@@ -158,13 +158,13 @@ public class Heartbeat implements Runnable {
 
     //This looks kind of scary. Gets a random server ID from peerIDtoAddress map
     private Long getRandomServerID() {
-        int random = ThreadLocalRandom.current().nextInt(1, peerIDtoAddress.size() + 1);
+        int random = ThreadLocalRandom.current().nextInt(0, peerIDtoAddress.size());
         return (long)peerIDtoAddress.keySet().toArray()[random];
 
     }
 
     private void removeServer(Long id) {
-        deadServers.add(peerIDtoAddress.get(id).getHostName()+peerIDtoAddress.get(id).getPort());//Is this necessary?
+        deadServers.add(id);//Is this necessary?
         peerIDtoAddress.remove(id);
         serverTracker.remove(id);
     }

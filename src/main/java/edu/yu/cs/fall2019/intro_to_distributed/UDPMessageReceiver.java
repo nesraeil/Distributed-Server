@@ -4,6 +4,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -15,17 +16,19 @@ public class UDPMessageReceiver implements Runnable
     private LinkedBlockingQueue<Message> incomingMessages;
     private volatile boolean shutdown = false;
     LinkedBlockingQueue<Message> incomingHeartGossip;
-    HashSet<String> deadServers;
+    private HashMap<Long,InetSocketAddress> peerIDtoAddress;
+
 
     public UDPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages,
                               LinkedBlockingQueue<Message> incomingHeartGossip,
-                              HashSet<String> deadServers,
+                              HashMap<Long,InetSocketAddress> peerIDtoAddress,
                               InetSocketAddress myAddress,int myPort)
     {
         this.incomingMessages = incomingMessages;
         this.incomingHeartGossip = incomingHeartGossip;
         this.myAddress = myAddress;
         this.myPort = myPort;
+        this.peerIDtoAddress = peerIDtoAddress;
     }
 
     public void shutdown()
@@ -57,13 +60,13 @@ public class UDPMessageReceiver implements Runnable
                 socket.receive(packet); // Receive packet from a client
                 Message received = new Message(packet.getData());
                 //Ignores all messages from servers that are in the dead list
-                if(!deadServers.contains(received.getSenderHost() + received.getSenderPort())) {
+                //if(isSenderAlive(received.getSenderHost(), received.getSenderPort())) {
                     if(received.getMessageType() == Message.MessageType.HEARTBEAT || received.getMessageType() == Message.MessageType.GOSSIP) {
                         this.incomingHeartGossip.put(received);
                     } else {
                         this.incomingMessages.put(received);
                     }
-                }
+                //}
 
             }
             catch(SocketTimeoutException ste)
@@ -82,5 +85,17 @@ public class UDPMessageReceiver implements Runnable
         {
             socket.close();
         }
+    }
+
+    //If the server that we got a message from is not in the serverList, return false
+    private boolean isSenderAlive(String host, int port) {
+        String senderServer = host + port;
+        for(Long id:peerIDtoAddress.keySet()) {
+            String peerServer = peerIDtoAddress.get(id).getHostName() + peerIDtoAddress.get(id).getPort();
+            if(peerServer.equals(senderServer)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
