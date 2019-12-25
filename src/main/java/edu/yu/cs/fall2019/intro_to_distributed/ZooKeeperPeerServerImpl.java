@@ -3,6 +3,7 @@ package edu.yu.cs.fall2019.intro_to_distributed;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static edu.yu.cs.fall2019.intro_to_distributed.Util.startAsDaemon;
@@ -13,7 +14,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     private final int myPort;
     private long peerEpoch;
     private long id;
-    private HashMap<Long,InetSocketAddress> peerIDtoAddress;
+    private ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
     private final InetSocketAddress myAddress;
     private ServerState state;
     private volatile boolean shutdown;
@@ -36,7 +37,6 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     private RoundRobinLeader leader;
 
     //Heartbeat runner and list of dead servers that it updates
-    private HashSet<Long> deadServers;//Server ID
     private Heartbeat heart;
 
 
@@ -45,30 +45,28 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         this.myPort = myPort;
         this.peerEpoch = peerEpoch;
         this.id = id;
-        this.peerIDtoAddress = peerIDtoAddress;
+        this.peerIDtoAddress = new ConcurrentHashMap<>(peerIDtoAddress);
         this.myAddress = new InetSocketAddress("localhost", myPort);//Check this
 
         //Hearbeat and gossip incoming queues
         this.incomingHeartGossip = new LinkedBlockingQueue<>();
 
-        deadServers = new HashSet<>();
-
         //UDP Stuff
         this.outgoingUDP = new LinkedBlockingQueue<>();
         this.incomingUDP = new LinkedBlockingQueue<>();
         this.senderWorkerUDP = new UDPMessageSender(this.outgoingUDP);
-        this.receiverWorkerUDP = new UDPMessageReceiver(this.incomingUDP,this.incomingHeartGossip, peerIDtoAddress, this.myAddress,this.myPort);
+        this.receiverWorkerUDP = new UDPMessageReceiver(this.incomingUDP,this.incomingHeartGossip, this.peerIDtoAddress, this.myAddress,this.myPort);
 
         //TCP Stuff
         this.outgoingTCP = new LinkedBlockingQueue<>();
         this.incomingTCP = new LinkedBlockingQueue<>();
         this.senderWorkerTCP = new TCPMessageSender(this.outgoingTCP);
-        this.receiverWorkerTCP = new TCPMessageReceiver(this.incomingTCP, peerIDtoAddress, this.myPort);
+        this.receiverWorkerTCP = new TCPMessageReceiver(this.incomingTCP, this.peerIDtoAddress, this.myPort);
 
         this.state = ServerState.LOOKING;
         this.requestID = 0;
 
-        heart = new Heartbeat(this, incomingHeartGossip, deadServers, peerIDtoAddress);
+        heart = new Heartbeat(this, incomingHeartGossip, this.peerIDtoAddress);
     }
 
     @Override
@@ -96,6 +94,8 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         startAsDaemon(receiverWorkerUDP, "UDP receiving thread for " + this.myAddress.getPort());
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
+        //startAsDaemon(heart, "Heartbeat thread for " + this.myAddress.getPort());
+
         //step 3: main server loop
         try
         {

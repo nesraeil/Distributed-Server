@@ -6,6 +6,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class UDPMessageReceiver implements Runnable
@@ -16,12 +17,12 @@ public class UDPMessageReceiver implements Runnable
     private LinkedBlockingQueue<Message> incomingMessages;
     private volatile boolean shutdown = false;
     LinkedBlockingQueue<Message> incomingHeartGossip;
-    private HashMap<Long,InetSocketAddress> peerIDtoAddress;
+    private ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
 
 
     public UDPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages,
                               LinkedBlockingQueue<Message> incomingHeartGossip,
-                              HashMap<Long,InetSocketAddress> peerIDtoAddress,
+                              ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress,
                               InetSocketAddress myAddress,int myPort)
     {
         this.incomingMessages = incomingMessages;

@@ -12,6 +12,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +26,7 @@ public class Gateway implements ZooKeeperPeerServer {
     private final int myPort;
     private long peerEpoch;
     private Long id;
-    private HashMap<Long,InetSocketAddress> peerIDtoAddress;
+    private ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
     private final InetSocketAddress myAddress;
     private ServerState state;
     private volatile boolean shutdown;
@@ -42,10 +43,9 @@ public class Gateway implements ZooKeeperPeerServer {
     private TCPMessageSender senderWorkerTCP;
     private TCPMessageReceiver receiverWorkerTCP;
     private LinkedBlockingQueue<Message> incomingHeartGossip;
-    private final HttpServer httpServer;
+    private HttpServer httpServer;
 
     //Heartbeat runner and list of dead servers that it updates
-    private HashSet<Long> deadServers;//server IDs
     private Heartbeat heart;
 
     //Client work trackers
@@ -59,7 +59,7 @@ public class Gateway implements ZooKeeperPeerServer {
         this.myPort = myPort;
         this.peerEpoch = peerEpoch;
         this.id = id;
-        this.peerIDtoAddress = peerIDtoAddress;
+        this.peerIDtoAddress = new ConcurrentHashMap<>(peerIDtoAddress);
         this.myAddress = new InetSocketAddress("localhost", myPort);
         this.state = ServerState.OBSERVING;
         this.shutdown = false;
@@ -67,27 +67,27 @@ public class Gateway implements ZooKeeperPeerServer {
 
         //Hearbeat and gossip stuff
         this.incomingHeartGossip = new LinkedBlockingQueue<>();
-        deadServers = new HashSet<>();
-        heart = new Heartbeat(this, incomingHeartGossip, deadServers, peerIDtoAddress);
+        heart = new Heartbeat(this, incomingHeartGossip, this.peerIDtoAddress);
 
         //UDP Stuff
         this.outgoingUDP = new LinkedBlockingQueue<>();
         this.incomingUDP = new LinkedBlockingQueue<>();
         this.senderWorkerUDP = new UDPMessageSender(this.outgoingUDP);
-        this.receiverWorkerUDP = new UDPMessageReceiver(this.incomingUDP,this.incomingHeartGossip,peerIDtoAddress, this.myAddress,this.myPort);
+        this.receiverWorkerUDP = new UDPMessageReceiver(this.incomingUDP,this.incomingHeartGossip,this.peerIDtoAddress, this.myAddress,this.myPort);
 
         //TCP Stuff
         this.outgoingTCP = new LinkedBlockingQueue<>();
         this.incomingTCP = new LinkedBlockingQueue<>();
         this.senderWorkerTCP = new TCPMessageSender(this.outgoingTCP);
-        this.receiverWorkerTCP = new TCPMessageReceiver(this.incomingTCP, peerIDtoAddress, this.myPort);
+        this.receiverWorkerTCP = new TCPMessageReceiver(this.incomingTCP, this.peerIDtoAddress, this.myPort);
 
         //Work from client queue
         workFromClientBuff = new LinkedBlockingQueue<>();
 
         //Hardcoded http public port
+
         try {
-            httpServer = HttpServer.create(new InetSocketAddress(GATEWAYPORT), 10);
+            httpServer = HttpServer.create(new InetSocketAddress(GATEWAYPORT), 0);
             httpServer.createContext("/compileandrun", new MyHandler());
             httpServer.setExecutor(null);
             System.out.println("starting http server on port: " + GATEWAYPORT);
@@ -126,8 +126,9 @@ public class Gateway implements ZooKeeperPeerServer {
 
         while (!shutdown) {
 
-            if(currentLeader == null || deadServers.contains(currentLeader.getCandidateID())) {
+            if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID())) {
                 setCurrentLeader(lookForLeader());
+                System.out.println("Gateway is ready to accept messages");
             }
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
@@ -136,6 +137,7 @@ public class Gateway implements ZooKeeperPeerServer {
                 if(work != null) {
                     requestID++;
                     sendMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
+                    System.out.println("Gateway sent work");
                     requestIdToWork.put(requestID,work);
 
                 }
@@ -145,10 +147,8 @@ public class Gateway implements ZooKeeperPeerServer {
 
             if(incomingTCP.peek() != null) {
                 Message message = incomingTCP.poll();
-                //System.out.println(leader.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
                 switch (message.getMessageType()) {
                     case COMPLETED_WORK:
-
                         returnCompletedWork(message.getRequestID(), message.getMessageContents());
                         break;
                     default:

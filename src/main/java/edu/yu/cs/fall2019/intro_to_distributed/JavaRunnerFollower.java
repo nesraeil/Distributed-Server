@@ -33,6 +33,8 @@ class JavaRunnerFollower
     void start() {
         while(!shutdown) {
             if(incomingMessagesTCP.peek() != null) {
+
+
                 Message message = incomingMessagesTCP.poll();
                 //System.out.println(workerServer.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
                 switch (message.getMessageType()) {

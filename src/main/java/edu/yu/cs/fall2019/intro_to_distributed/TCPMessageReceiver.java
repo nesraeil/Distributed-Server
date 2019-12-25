@@ -5,16 +5,17 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class TCPMessageReceiver implements Runnable{
     private LinkedBlockingQueue<Message> incomingMessages;
     private volatile boolean shutdown = false;
-    private HashMap<Long,InetSocketAddress> peerIDtoAddress;
+    private ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
     private int myPort;
 
     public TCPMessageReceiver(LinkedBlockingQueue<Message> incomingMessages,
-                              HashMap<Long,InetSocketAddress> peerIDtoAddress,
+                              ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress,
                               int myPort) {
         this.incomingMessages = incomingMessages;
         this.peerIDtoAddress = peerIDtoAddress;
