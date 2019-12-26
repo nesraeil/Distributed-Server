@@ -122,7 +122,7 @@ public class Gateway implements ZooKeeperPeerServer {
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
         httpServer.start();
-        //startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
+        startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
 
         while (!shutdown) {
 

@@ -10,7 +10,7 @@ import java.util.Map;
 public class Stage4Test
 {
     private int[] ports = {8010, 8020, 8030, 8040, 8050, 8060, 8070, 8080, 8090};
-    private int GATEWAYPORT = 8090;//Hardcoded
+    private int GATEWAYPORT = 8010;//Hardcoded
     private ArrayList<ZooKeeperPeerServer> servers;
 
     public Stage4Test() throws Exception{
@@ -20,7 +20,7 @@ public class Stage4Test
         //step2.1: wait for election to happen
         try
         {
-            Thread.sleep(3000);
+            Thread.sleep(4000);
         }
         catch (Exception e)
         {
@@ -41,7 +41,6 @@ public class Stage4Test
         this.servers = new ArrayList<>(3);
         for (Map.Entry<Long, InetSocketAddress> entry : peerIDtoAddress.entrySet())
         {
-
             HashMap<Long, InetSocketAddress> map = (HashMap<Long, InetSocketAddress>) peerIDtoAddress.clone();
             map.remove(entry.getKey());
             if(entry.getValue().getPort() == GATEWAYPORT) {

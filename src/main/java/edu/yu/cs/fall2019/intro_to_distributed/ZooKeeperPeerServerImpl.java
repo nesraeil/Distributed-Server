@@ -40,7 +40,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     private Heartbeat heart;
 
 
-    public ZooKeeperPeerServerImpl(int myPort, long peerEpoch, Long id, HashMap<Long, InetSocketAddress> peerIDtoAddress)
+    public ZooKeeperPeerServerImpl(int myPort, long peerEpoch, long id, HashMap<Long, InetSocketAddress> peerIDtoAddress)
     {
         this.myPort = myPort;
         this.peerEpoch = peerEpoch;
@@ -94,7 +94,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         startAsDaemon(receiverWorkerUDP, "UDP receiving thread for " + this.myAddress.getPort());
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
-        //startAsDaemon(heart, "Heartbeat thread for " + this.myAddress.getPort());
+        startAsDaemon(heart, "Heartbeat thread for " + this.myAddress.getPort());
 
         //step 3: main server loop
         try
