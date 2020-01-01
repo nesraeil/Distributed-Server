@@ -137,7 +137,6 @@ public class Gateway implements ZooKeeperPeerServer {
                 if(work != null) {
                     requestID++;
                     sendMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
-                    System.out.println("Gateway sent work");
                     requestIdToWork.put(requestID,work);
 
                 }

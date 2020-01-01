@@ -40,6 +40,7 @@ class JavaRunnerFollower
                 switch (message.getMessageType()) {
                     case WORK:
                         try {
+                            //System.out.println(new String(message.getMessageContents()));
                             String result = javaRunner.compileAndRun(new ByteArrayInputStream(message.getMessageContents()));
                             long leader = workerServer.getCurrentLeader().getCandidateID();
                             sendResponse(result,leader, message.getRequestID());

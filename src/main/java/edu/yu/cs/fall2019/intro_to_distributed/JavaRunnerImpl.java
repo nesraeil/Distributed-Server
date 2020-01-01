@@ -73,20 +73,22 @@ public class JavaRunnerImpl implements JavaRunner{
                         e.getCause().getStackTrace()[0].getLineNumber() + " in " +
                         e.getCause().getStackTrace()[0].getClassName() + ".");
             } catch (NoSuchMethodException e) {//CONFIRM THAT THIS SHOULD BE HERE
-                System.err.println("Source code does not contain run() method.");
-                //throw new IllegalArgumentException("Source code does not contain run() method");
+                //System.err.println("Source code does not contain run() method.");
+                throw new IllegalArgumentException("Source code does not contain run() method");
             } catch (Exception e) {
-                System.err.println("Unable to run source code.");
+                //System.err.println("Unable to run source code.");
+                throw new IllegalArgumentException("Unable to run source code.");
                 //e.printStackTrace();
-            } finally {
-                output = "System.err:\n" + err + "\nSystem.out:\n" + out;
-                //output += code;
-                System.out.flush();
-                System.err.flush();
-
-                System.setOut(oldOut);
-                System.setErr(oldErr);
             }
+
+            output = "System.err:\n" + err + "\nSystem.out:\n" + out + "\n";
+            //output += code;
+            System.out.flush();
+            System.err.flush();
+
+            System.setOut(oldOut);
+            System.setErr(oldErr);
+
 
         }
         return output;
@@ -102,11 +104,11 @@ public class JavaRunnerImpl implements JavaRunner{
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null);
         Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjectsFromFiles(Arrays.asList(source));
-        JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, null, null, compilationUnits);
+        //JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, null, null, compilationUnits);
         compiler.getTask(null, fileManager, diagnostics, null, null, compilationUnits).call();
 
         for ( Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
-            String error = String.format("Error on line %d, column %d in %s%n",
+            String error = String.format("Compilation error on line %d, column %d in %s%n",
                     diagnostic.getLineNumber(),
                     diagnostic.getColumnNumber(),
                     diagnostic.getSource().toUri());
@@ -117,9 +119,9 @@ public class JavaRunnerImpl implements JavaRunner{
 
     private File createSource(String code) throws IOException{
         String packageName = getPackage(code);
-        packageName = packageName.replace('.', '\\');
+        packageName = packageName.replace('.', '/');
         String className = getClass(code);
-        String source = outPath.toString() + '\\' + packageName + '\\' + className + ".java";
+        String source = outPath.toString() + '/' + packageName + '/' + className + ".java";
 
         File file = new File(source);
         file.getParentFile().mkdirs();
