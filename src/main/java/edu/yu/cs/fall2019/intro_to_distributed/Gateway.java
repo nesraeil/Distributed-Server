@@ -8,12 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -26,7 +22,7 @@ public class Gateway implements ZooKeeperPeerServer {
     private final int myPort;
     private long peerEpoch;
     private Long id;
-    private ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
+    private volatile ConcurrentHashMap<Long,InetSocketAddress> peerIDtoAddress;
     private final InetSocketAddress myAddress;
     private ServerState state;
     private volatile boolean shutdown;
@@ -87,8 +83,9 @@ public class Gateway implements ZooKeeperPeerServer {
         //Hardcoded http public port
 
         try {
-            httpServer = HttpServer.create(new InetSocketAddress(GATEWAYPORT), 0);
-            httpServer.createContext("/compileandrun", new MyHandler());
+            httpServer = HttpServer.create(new InetSocketAddress("localhost", GATEWAYPORT), 0);
+            httpServer.createContext("/compileandrun", new CompileHandler());
+            httpServer.createContext("/getleader", new GetLeaderHandler());
             httpServer.setExecutor(null);
             System.out.println("starting http server on port: " + GATEWAYPORT);
         } catch (IOException e) {
@@ -122,14 +119,14 @@ public class Gateway implements ZooKeeperPeerServer {
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
         httpServer.start();
+        new Thread(heart);
         startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
 
         while (!shutdown) {
-
             if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID())) {
                 setCurrentLeader(lookForLeader());
-                System.out.println("Gateway is ready to accept messages");
             }
+
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
             try {
@@ -295,12 +292,42 @@ public class Gateway implements ZooKeeperPeerServer {
         }
     }
 
-    class MyHandler implements HttpHandler {
+    class CompileHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
             InputStream is = t.getRequestBody();
             byte[] work = Util.readAllBytes(is);
             ClientRequest cr = new ClientRequest(t, work);
             workFromClientBuff.offer(cr);
         }
+    }
+
+    class GetLeaderHandler implements HttpHandler {
+        public void handle(HttpExchange t) throws IOException {
+            byte[] message = getLeaders().getBytes();
+            //byte[] message = "testing this".getBytes();
+            t.sendResponseHeaders(200, message.length);
+            OutputStream os = t.getResponseBody();
+            os.write(message);
+            os.close();
+        }
+    }
+
+    private String getLeaders() {
+        StringBuilder response = new StringBuilder();
+        if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID()) ) {
+            response.append("There is no leader");
+        } else {
+            response.append(peerIDtoAddress.size() + "\n");
+            for (long serverID : peerIDtoAddress.keySet()) {
+                response.append("Server on port ").append(peerIDtoAddress.get(serverID).getPort()).append(" whose ID is ").append(serverID);
+                if (serverID == currentLeader.getCandidateID()) {
+                    response.append(" is LEADING\n");
+                } else {
+                    response.append(" is FOLLOWING\n");
+                }
+            }
+            response.append("Server on port ").append(myPort).append(" whose ID is ").append(id).append(" is OBSERVING\n");
+        }
+        return response.toString();
     }
 }

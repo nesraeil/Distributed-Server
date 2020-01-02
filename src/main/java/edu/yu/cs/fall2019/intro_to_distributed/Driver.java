@@ -29,7 +29,5 @@ public class Driver {
             ZooKeeperPeerServer server = new ZooKeeperPeerServerImpl(ports[myID], 0, myID, peerIDtoAddress);
             new Thread(server, "Server on port " + server.getMyAddress().getPort()).start();
         }
-        System.out.println("Started server at port: " + ports[myID]);
-
     }
 }
