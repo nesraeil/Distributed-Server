@@ -106,11 +106,12 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
                     case LOOKING:
                         //start leader election
                         peerEpoch++;
+                        System.out.println("starting election");
                         setCurrentLeader(lookForLeader());
                         peerEpoch = currentLeader.getPeerEpoch();
                         break;
                     case FOLLOWING:
-                        follower = new JavaRunnerFollower(this, incomingTCP, outgoingTCP, incomingUDP, outgoingUDP);
+                        follower = new JavaRunnerFollower(this, incomingTCP, outgoingTCP, incomingUDP, outgoingUDP, peerIDtoAddress);
                         follower.start();
                         break;
                     case LEADING:
@@ -208,5 +209,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         ZooKeeperLeaderElection election = new ZooKeeperLeaderElection(this,this.incomingUDP);
         return election.lookForLeader();
     }
+
+
 
 }

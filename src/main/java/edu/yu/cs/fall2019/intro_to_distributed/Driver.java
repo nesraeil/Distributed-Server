@@ -1,9 +1,8 @@
 package edu.yu.cs.fall2019.intro_to_distributed;
 
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
+
 
 public class Driver {
     private static int[] ports = {8010, 8020, 8030, 8040, 8050, 8060, 8070, 8080};
@@ -22,12 +21,13 @@ public class Driver {
         }
 
         peerIDtoAddress.remove((long)myID);
+        ZooKeeperPeerServer server;
         if(ports[myID] == GATEWAYPORT) {
-            ZooKeeperPeerServer server = new Gateway(ports[myID], 0, myID, peerIDtoAddress);
-            new Thread(server, "Server on port " + server.getMyAddress().getPort()).start();
+            server = new Gateway(ports[myID], 0, myID, peerIDtoAddress);
+
         } else {
-            ZooKeeperPeerServer server = new ZooKeeperPeerServerImpl(ports[myID], 0, myID, peerIDtoAddress);
-            new Thread(server, "Server on port " + server.getMyAddress().getPort()).start();
+            server = new ZooKeeperPeerServerImpl(ports[myID], 0, myID, peerIDtoAddress);
         }
+        new Thread(server, "Server on port " + server.getMyAddress().getPort()).start();
     }
 }

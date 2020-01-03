@@ -3,10 +3,13 @@ package edu.yu.cs.fall2019.intro_to_distributed;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 class JavaRunnerFollower
 {
+    private final long leader;
+    private ConcurrentHashMap<Long, InetSocketAddress> peerIDtoAddress;
     private ZooKeeperPeerServer workerServer;
     private LinkedBlockingQueue<Message> incomingMessagesTCP;
     private LinkedBlockingQueue<Message> incomingMessagesUDP;
@@ -16,11 +19,12 @@ class JavaRunnerFollower
     private JavaRunnerImpl javaRunner;
     private boolean shutdown;
 
-    JavaRunnerFollower(ZooKeeperPeerServer workerServer ,
+    JavaRunnerFollower(ZooKeeperPeerServer workerServer,
                        LinkedBlockingQueue<Message> incomingMessagesTCP,
                        LinkedBlockingQueue<Message> outgoingMessagesTCP,
                        LinkedBlockingQueue<Message> incomingMessagesUDP,
-                       LinkedBlockingQueue<Message> outgoingMessagesUDP) {
+                       LinkedBlockingQueue<Message> outgoingMessagesUDP,
+                       ConcurrentHashMap<Long, InetSocketAddress> peerIDtoAddress) {
         this.workerServer = workerServer;
         this.incomingMessagesTCP = incomingMessagesTCP;
         this.outgoingMessagesTCP = outgoingMessagesTCP;
@@ -28,10 +32,17 @@ class JavaRunnerFollower
         this.outgoingMessagesUDP = outgoingMessagesUDP;
         javaRunner = new JavaRunnerImpl();
         shutdown = false;
+        this.peerIDtoAddress = peerIDtoAddress;
+        this.leader = workerServer.getCurrentLeader().getCandidateID();
     }
 
     void start() {
         while(!shutdown) {
+            if(leaderIsDead()) {
+                //If leader is dead, start election
+                workerServer.setPeerState(ZooKeeperPeerServer.ServerState.LOOKING);
+                shutdown();
+            }
             if(incomingMessagesTCP.peek() != null) {
 
 
@@ -42,8 +53,14 @@ class JavaRunnerFollower
                         try {
                             //System.out.println(new String(message.getMessageContents()));
                             String result = javaRunner.compileAndRun(new ByteArrayInputStream(message.getMessageContents()));
-                            long leader = workerServer.getCurrentLeader().getCandidateID();
-                            sendResponse(result,leader, message.getRequestID());
+                            if(leaderIsDead()) {
+                                //If there is no leader, put the message back into my queue and start election
+                                incomingMessagesTCP.offer(message);
+                                workerServer.setPeerState(ZooKeeperPeerServer.ServerState.LOOKING);
+                                shutdown();
+                            }else {
+                                sendResponse(result,leader, message.getRequestID());
+                            }
                         } catch (IOException e) {
                             //TODO
                         }
@@ -56,6 +73,10 @@ class JavaRunnerFollower
             }
             checkUDPQueue();
         }
+    }
+
+    private boolean leaderIsDead() {
+        return !peerIDtoAddress.containsKey(leader);
     }
 
     private void checkUDPQueue() {

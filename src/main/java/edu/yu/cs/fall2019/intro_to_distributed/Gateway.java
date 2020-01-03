@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -86,6 +87,7 @@ public class Gateway implements ZooKeeperPeerServer {
             httpServer = HttpServer.create(new InetSocketAddress("localhost", GATEWAYPORT), 0);
             httpServer.createContext("/compileandrun", new CompileHandler());
             httpServer.createContext("/getleader", new GetLeaderHandler());
+            httpServer.createContext("/getgossip", new GossipHandler());
             httpServer.setExecutor(null);
             System.out.println("starting http server on port: " + GATEWAYPORT);
         } catch (IOException e) {
@@ -119,14 +121,12 @@ public class Gateway implements ZooKeeperPeerServer {
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
         httpServer.start();
-        new Thread(heart);
         startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
 
         while (!shutdown) {
             if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID())) {
                 setCurrentLeader(lookForLeader());
             }
-
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
             try {
@@ -329,5 +329,39 @@ public class Gateway implements ZooKeeperPeerServer {
             response.append("Server on port ").append(myPort).append(" whose ID is ").append(id).append(" is OBSERVING\n");
         }
         return response.toString();
+    }
+
+    class GossipHandler implements HttpHandler {
+        public void handle(HttpExchange t) throws IOException {
+            byte[] message = getGossip().getBytes();
+            t.sendResponseHeaders(200, message.length);
+            OutputStream os = t.getResponseBody();
+            os.write(message);
+            os.close();
+        }
+    }
+
+    private String getGossip() {
+        ArrayList<String> gossip = heart.getGossip();
+        StringBuilder result = new StringBuilder();
+        result.append("----SERVER ").append(id).append("'s GOSSIP----\n");
+        //Each gossip consists of the following:
+        //[SenderID:ServerID Heartbeat ReceivedTime Failed?, ServerID Heartbeat ReceivedTime Failed? etc...]
+        for(String gossipTable:gossip) {
+            String[] idAndTable = gossipTable.split(":");
+            result.append("Sender ID: ").append(idAndTable[0]).append('\n');
+            result.append("\tServerID Heartbeat TimeReceived\n");// Failed?\n");
+
+            String[] lines = idAndTable[1].split(",");
+            for(String line: lines) {
+                String[] lineArr = line.split(" ");
+                result.append('\t').append(lineArr[0]).append("        ")
+                        .append(lineArr[1]).append("         ")
+                        .append(lineArr[2]).append("            \n");
+                        //.append(lineArr[3]).append('\n');
+            }
+        }
+        result.append('\n');
+        return result.toString();
     }
 }
