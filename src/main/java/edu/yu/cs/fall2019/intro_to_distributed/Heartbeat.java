@@ -1,10 +1,8 @@
 package edu.yu.cs.fall2019.intro_to_distributed;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
-import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.*;
@@ -16,15 +14,20 @@ public class Heartbeat implements Runnable {
     private final LinkedBlockingQueue<Message> incomingHeartbeat;
     private volatile ConcurrentHashMap<Long, InetSocketAddress> peerIDtoAddress;
     private final ConcurrentHashMap<Long, HeartbeatData> serverTracker;
-    private volatile int clockTimer;
+    private long clockTimer;
     private boolean shutdown;
     private final int beatDelay;
     private final int TFAIL;
     private final int TCLEANUP;
     private volatile int myHeartbeat;
 
-    private ScheduledExecutorService heart;
-    private ScheduledExecutorService serverChecker;
+    private final ScheduledExecutorService heart;
+    private final ScheduledExecutorService serverChecker;
+    private final ScheduledExecutorService clock;
+
+    private Random rand;
+
+    private ArrayList<String> gossipLog;
 
     Heartbeat(ZooKeeperPeerServer myServer ,
               LinkedBlockingQueue<Message> incomingHeartGossip,
@@ -43,30 +46,37 @@ public class Heartbeat implements Runnable {
 
         heart = Executors.newSingleThreadScheduledExecutor();
         serverChecker = Executors.newSingleThreadScheduledExecutor();
+        clock = Executors.newSingleThreadScheduledExecutor();
+
+        rand  = new Random();
+        gossipLog = new ArrayList<>();
     }
 
     void shutdown() {
         shutdown = true;
         heart.shutdown();
         serverChecker.shutdown();
+        clock.shutdown();
     }
 
     @Override
     public void run() {
+        //startClock();
         beat();
         checkAllServers();
         while (!shutdown) {
             Message m = null;
             try {
-                m = incomingHeartbeat.poll(1, TimeUnit.SECONDS);
+                m = incomingHeartbeat.poll(50, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
 
-            } catch (InterruptedException e) {}
             if(m == null) continue;
 
             if(m.getMessageType() == Message.MessageType.HEARTBEAT) {
                 updateByHeartbeat(m);
             } else {
-                System.out.println("got gossip");
                 updateByGossip(m);
             }
         }
@@ -75,7 +85,6 @@ public class Heartbeat implements Runnable {
     private void checkAllServers() {
         serverChecker.scheduleAtFixedRate(() -> {
         for(Long serverID: serverTracker.keySet()) {
-
             //Only check servers that are not me
             if(!serverID.equals(myServer.getId())) {
                 long elapsedTime = clockTimer - serverTracker.get(serverID).receivedTime;
@@ -91,6 +100,12 @@ public class Heartbeat implements Runnable {
         }, 0, 500, TimeUnit.MILLISECONDS);
     }
 
+    /*private void startClock() {
+        clock.scheduleAtFixedRate(() -> {
+            clockTimer++;
+        }, 0, 1, TimeUnit.SECONDS);
+    }*/
+
 
 
     private void beat() {
@@ -102,13 +117,59 @@ public class Heartbeat implements Runnable {
                 String message = myHeartbeat + " " + myServer.getId();
                 myServer.sendBroadcast(Message.MessageType.HEARTBEAT, message.getBytes());
                 //Sends gossip data every three beats
-                if(myHeartbeat % 2 == 0) {
-                    Gson gson = new Gson();
-                    String jsonString = myServer.getId() + "#" + gson.toJson(serverTracker);
-                    myServer.sendMessage(Message.MessageType.GOSSIP, jsonString.getBytes(), getRandomServer());
+                if(beatDelay % 2 == 0) {
+                    myServer.sendMessage(Message.MessageType.GOSSIP, serverTrackerToString().getBytes(), getRandomServer());
                 }
             }
         }, 0, 1, TimeUnit.SECONDS);
+    }
+
+    private String serverTrackerToString() {
+        StringBuilder result = new StringBuilder();
+        result.append(myServer.getId()).append(':');
+        for(long key: serverTracker.keySet()) {
+            result.append(key).append(" ")
+                    .append(serverTracker.get(key).otherHeartbeat).append(" ")
+                    .append(serverTracker.get(key).receivedTime).append(" ")
+                    .append(serverTracker.get(key).failed)
+                    .append(',');
+        }
+        return result.toString();
+    }
+
+    private HashMap<Long, HeartbeatData> stringToServerTracker(String input) {
+        HashMap<Long, HeartbeatData> result = new HashMap<>();
+        String[] entries = input.split(",");
+        for(String entryLine: entries) {
+            String[] entryArr = entryLine.split(" ");
+            long key = Long.parseLong(entryArr[0]);
+            long otherHeartbeat = Long.parseLong(entryArr[1]);
+            long receivedTime = Long.parseLong(entryArr[2]);
+            boolean failed = Boolean.valueOf(entryArr[3]);
+            HeartbeatData temp = new HeartbeatData(key, otherHeartbeat, receivedTime, failed);
+            result.put(key, temp);
+        }
+        return result;
+    }
+
+    private void updateByGossip(Message m) {
+        //Converting gossip json to hashmap
+        String contents = new String(m.getMessageContents());
+        String[] idAndMap = contents.split(":");
+        if(idAndMap.length > 1) {
+            gossipLog.add(contents);
+            String senderID = idAndMap[0];
+            String json = idAndMap[1];
+            HashMap<Long, HeartbeatData> gossipMap = stringToServerTracker(json);
+
+            for(long gossipID : gossipMap.keySet()) {
+                if(updateServerTracker(gossipID, gossipMap.get(gossipID).otherHeartbeat)) {
+                    String message = myServer.getId() + ": updated " + gossipID + "'s heartbeat to " + gossipMap.get(gossipID).otherHeartbeat
+                            + " based on gossip from " + senderID + " at node time " + clockTimer;
+                    System.out.println(message);
+                }
+            }
+        }
     }
 
 
@@ -124,32 +185,18 @@ public class Heartbeat implements Runnable {
             this.receivedTime = receivedTime;
             this.failed = false;
         }
+        HeartbeatData(long otherServerID, long otherHeartbeat, long receivedTime, boolean failed) {
+            this(otherServerID, otherHeartbeat, receivedTime);
+            this.failed = failed;
+        }
     }
 
     private InetSocketAddress getRandomServer() {
-        Random rand = new Random();
         int randInt = rand.nextInt(peerIDtoAddress.size());
         long randomID = (long)peerIDtoAddress.keySet().toArray()[randInt];
         return peerIDtoAddress.get(randomID);
     }
 
-    private void updateByGossip(Message m) {
-        //Converting gossip json to hashmap
-        String[] contents = new String(m.getMessageContents()).split("#");
-        String senderID = contents[0];
-        String json = contents[1];
-        Gson gson = new Gson();
-        Type type = new TypeToken<HashMap<Long, HeartbeatData>>(){}.getType();
-        HashMap<Long, HeartbeatData> gossipMap = gson.fromJson(json, type);
-
-        for(long gossipID : gossipMap.keySet()) {
-            if(updateServerTracker(gossipID, gossipMap.get(gossipID).otherHeartbeat)) {
-                String message = myServer.getId() + ": updated " + gossipID + "'s heartbeat to " + gossipMap.get(gossipID).otherHeartbeat
-                        + " based on gossip from " + senderID + " at node time " + clockTimer;
-                System.out.println(message);
-            }
-        }
-    }
 
     private void updateByHeartbeat(Message m) {
         //Getting the beat value from message
@@ -162,20 +209,26 @@ public class Heartbeat implements Runnable {
     }
 
     private boolean updateServerTracker(Long id, Long newHeartbeat) {
-        if(!serverTracker.containsKey(id)) {
-            //If we dont have any info on this server yet
-            serverTracker.put(id, new HeartbeatData(id, 0L, 0L));
-        }
+        if(!id.equals(myServer.getId())) {
+            if(!serverTracker.containsKey(id)) {
+                //If we dont have any info on this server yet
+                serverTracker.put(id, new HeartbeatData(id, 0L, 0L));
+            }
 
-        //Update the info that we already have (if server is not marked as failed, and new heartbeat is higher than old one)
-        HeartbeatData toUpdate = serverTracker.get(id);
-        if(!toUpdate.failed && newHeartbeat > toUpdate.otherHeartbeat && !id.equals(myServer.getId())) {
-            toUpdate.otherHeartbeat = newHeartbeat;
-            toUpdate.receivedTime = clockTimer;
-            serverTracker.put(id, toUpdate);
-            return true;
+            //Update the info that we already have (if server is not marked as failed, and new heartbeat is higher than old one)
+            HeartbeatData toUpdate = serverTracker.get(id);
+            if(!toUpdate.failed && newHeartbeat > toUpdate.otherHeartbeat) {
+                toUpdate.otherHeartbeat = newHeartbeat;
+                toUpdate.receivedTime = clockTimer;
+                serverTracker.put(id, toUpdate);
+                return true;
+            }
         }
         return false;
+    }
+
+    ArrayList<String> getGossip() {
+        return gossipLog;
     }
 
 }
