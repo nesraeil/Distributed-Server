@@ -1,4 +1,4 @@
-exec > >(tee "output.txt") 2>&1
+exec > >(tee "output.log") 2>&1
 #Step 1
 mvn clean test
 
