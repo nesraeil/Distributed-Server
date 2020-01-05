@@ -47,11 +47,9 @@ class JavaRunnerFollower
 
 
                 Message message = incomingMessagesTCP.poll();
-                //System.out.println(workerServer.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
                 switch (message.getMessageType()) {
                     case WORK:
                         try {
-                            //System.out.println(new String(message.getMessageContents()));
                             String result = javaRunner.compileAndRun(new ByteArrayInputStream(message.getMessageContents()));
                             if(leaderIsDead()) {
                                 //If there is no leader, put the message back into my queue and start election
@@ -82,7 +80,6 @@ class JavaRunnerFollower
     private void checkUDPQueue() {
         if(incomingMessagesUDP.peek() != null) {
             Message message = incomingMessagesUDP.poll();
-            //System.out.println(workerServer.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
             switch (message.getMessageType()) {
                 case ELECTION:
                     String electionResponse =

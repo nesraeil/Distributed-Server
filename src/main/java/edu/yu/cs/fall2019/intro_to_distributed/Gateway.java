@@ -187,31 +187,6 @@ public class Gateway implements ZooKeeperPeerServer {
         return 200;
     }
 
-    /*
-    private void acceptWorkFromClients(){
-        Thread t1 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (!shutdown) {
-                    //Takes http requests and puts contents into buffer to be read by client
-                    //Will hold work in that buffer if there is no current leader
-                    try {
-                        Socket client = httpServer.accept();
-                        InputStream is = client.getInputStream();
-                        byte[] work = Util.readAllBytes(is);
-                        ClientRequest cr = new ClientRequest(client, work);
-                        workFromClientBuff.offer(cr);
-
-                    } catch (IOException e) {
-                        System.err.println("Error accepting work from client");
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-        t1.start();
-    }*/
-
     @Override
     public void setCurrentLeader(Vote v) {
         currentLeader = v;

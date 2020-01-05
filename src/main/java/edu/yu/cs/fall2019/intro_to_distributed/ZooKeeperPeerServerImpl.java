@@ -77,7 +77,6 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         heart = new Heartbeat(this, incomingHeartGossip, this.peerIDtoAddress);
 
         //Gossip port will by my port + 1
-
         try {
             httpServer = HttpServer.create(new InetSocketAddress("localhost", myPort+1), 0);
             httpServer.createContext("/getgossip", new GossipHandler());

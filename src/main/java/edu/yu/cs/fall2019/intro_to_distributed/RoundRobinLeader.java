@@ -42,12 +42,9 @@ class RoundRobinLeader {
     }
 
     void start() {
-        //HashMap<Long, InetSocketAddress> requestToClientAddress = new HashMap<>();
-
         while(!shutdown) {
             if(incomingMessagesTCP.peek() != null) {
                 Message message = incomingMessagesTCP.poll();
-                //System.out.println(leader.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
                 switch (message.getMessageType()) {
                     case WORK://Sending work to peer servers on round robin basis
                         //If the iterator is done, restart
@@ -166,7 +163,6 @@ class RoundRobinLeader {
     private void checkUDPQueue() {
         if(incomingMessagesUDP.peek() != null) {
             Message message = incomingMessagesUDP.poll();
-            //System.out.println(workerServer.getMyPort() + " got " + message.getMessageType() + " message from " + message.getSenderPort());
             switch (message.getMessageType()) {
                 case ELECTION:
                     String electionResponse =

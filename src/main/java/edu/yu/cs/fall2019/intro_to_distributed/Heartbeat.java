@@ -100,14 +100,6 @@ public class Heartbeat implements Runnable {
         }, 0, 500, TimeUnit.MILLISECONDS);
     }
 
-    /*private void startClock() {
-        clock.scheduleAtFixedRate(() -> {
-            clockTimer++;
-        }, 0, 1, TimeUnit.SECONDS);
-    }*/
-
-
-
     private void beat() {
         heart.scheduleAtFixedRate(() -> {
             clockTimer++;
@@ -228,7 +220,7 @@ public class Heartbeat implements Runnable {
     }
 
     ArrayList<String> getGossip() {
-        return gossipLog;
+        return new ArrayList<>(gossipLog);
     }
 
 }
