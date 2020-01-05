@@ -209,7 +209,7 @@ public class Heartbeat implements Runnable {
     }
 
     private boolean updateServerTracker(Long id, Long newHeartbeat) {
-        if(!id.equals(myServer.getId())) {
+        if(!id.equals(myServer.getId()) && peerIDtoAddress.containsKey(id)) {
             if(!serverTracker.containsKey(id)) {
                 //If we dont have any info on this server yet
                 serverTracker.put(id, new HeartbeatData(id, 0L, 0L));

@@ -35,6 +35,9 @@ public class TCPMessageSender implements Runnable
                     socket.close();
                 }
             }
+            catch (ConnectException e) {
+                throw new IllegalStateException(e);
+            }
             catch (Exception e)
             {
                 e.printStackTrace();

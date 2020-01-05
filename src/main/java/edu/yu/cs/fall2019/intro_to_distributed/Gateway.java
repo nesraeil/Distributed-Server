@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,7 +90,7 @@ public class Gateway implements ZooKeeperPeerServer {
             httpServer.createContext("/getleader", new GetLeaderHandler());
             httpServer.createContext("/getgossip", new GossipHandler());
             httpServer.setExecutor(null);
-            System.out.println("starting http server on port: " + GATEWAYPORT);
+            //System.out.println("starting http server on port: " + GATEWAYPORT);
         } catch (IOException e) {
             throw new RuntimeException("Could not start gateway server at port " + GATEWAYPORT);
         }
@@ -130,10 +131,17 @@ public class Gateway implements ZooKeeperPeerServer {
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
             try {
-                work = workFromClientBuff.poll(1, TimeUnit.SECONDS);
+                work = workFromClientBuff.poll(200, TimeUnit.MILLISECONDS);
                 if(work != null) {
                     requestID++;
-                    sendMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
+                    try {
+                        sendMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
+                    } catch (Exception e) {
+                        requestID--;
+                        workFromClientBuff.offer(work);
+                        e.printStackTrace();
+                        continue;
+                    }
                     requestIdToWork.put(requestID,work);
 
                 }
@@ -303,9 +311,13 @@ public class Gateway implements ZooKeeperPeerServer {
 
     class GetLeaderHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
-            byte[] message = getLeaders().getBytes();
-            //byte[] message = "testing this".getBytes();
-            t.sendResponseHeaders(200, message.length);
+            String serverList = getLeaders();
+            byte[] message = serverList.getBytes();
+            if(serverList.equals("There is no leader")) {
+                t.sendResponseHeaders(400, message.length);
+            } else {
+                t.sendResponseHeaders(200, message.length);
+            }
             OutputStream os = t.getResponseBody();
             os.write(message);
             os.close();
@@ -317,7 +329,6 @@ public class Gateway implements ZooKeeperPeerServer {
         if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID()) ) {
             response.append("There is no leader");
         } else {
-            response.append(peerIDtoAddress.size() + "\n");
             for (long serverID : peerIDtoAddress.keySet()) {
                 response.append("Server on port ").append(peerIDtoAddress.get(serverID).getPort()).append(" whose ID is ").append(serverID);
                 if (serverID == currentLeader.getCandidateID()) {
@@ -341,7 +352,7 @@ public class Gateway implements ZooKeeperPeerServer {
         }
     }
 
-    private String getGossip() {
+    String getGossip() {
         ArrayList<String> gossip = heart.getGossip();
         StringBuilder result = new StringBuilder();
         result.append("----SERVER ").append(id).append("'s GOSSIP----\n");

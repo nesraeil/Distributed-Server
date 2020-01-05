@@ -5,8 +5,8 @@ import java.util.HashMap;
 
 
 public class Driver {
-    private static int[] ports = {8010, 8020, 8030, 8040, 8050, 8060, 8070, 8080};
-    private static int GATEWAYPORT = 8010;//Hardcoded
+    private static int[] ports = {8000, 8010, 8020, 8030, 8040, 8050, 8060, 8070};
+    private static int GATEWAYPORT = 8000;//Hardcoded
     public static void main(String[] args) {
         if(args.length != 1) {
             return;

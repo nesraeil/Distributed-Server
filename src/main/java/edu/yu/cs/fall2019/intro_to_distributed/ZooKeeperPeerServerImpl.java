@@ -1,8 +1,14 @@
 package edu.yu.cs.fall2019.intro_to_distributed;
 
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -39,6 +45,8 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     //Heartbeat runner and list of dead servers that it updates
     private Heartbeat heart;
 
+    private HttpServer httpServer;
+
 
     public ZooKeeperPeerServerImpl(int myPort, long peerEpoch, long id, HashMap<Long, InetSocketAddress> peerIDtoAddress)
     {
@@ -67,6 +75,16 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         this.requestID = 0;
 
         heart = new Heartbeat(this, incomingHeartGossip, this.peerIDtoAddress);
+
+        //Gossip port will by my port + 1
+
+        try {
+            httpServer = HttpServer.create(new InetSocketAddress("localhost", myPort+1), 0);
+            httpServer.createContext("/getgossip", new GossipHandler());
+            httpServer.setExecutor(null);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not start gossip service for server " + id + " at port " + (myPort+1));
+        }
     }
 
     @Override
@@ -84,6 +102,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         if(leader != null) {
             leader.shutdown();
         }
+        httpServer.stop(0);
 
     }
 
@@ -95,6 +114,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
         startAsDaemon(heart, "Heartbeat thread for " + this.myAddress.getPort());
+        httpServer.start();
 
         //step 3: main server loop
         try
@@ -106,7 +126,6 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
                     case LOOKING:
                         //start leader election
                         peerEpoch++;
-                        System.out.println("starting election");
                         setCurrentLeader(lookForLeader());
                         peerEpoch = currentLeader.getPeerEpoch();
                         break;
@@ -209,6 +228,42 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
         ZooKeeperLeaderElection election = new ZooKeeperLeaderElection(this,this.incomingUDP);
         return election.lookForLeader();
     }
+
+    private String getGossip() {
+        ArrayList<String> gossip = heart.getGossip();
+        StringBuilder result = new StringBuilder();
+        result.append("----SERVER ").append(id).append("'s GOSSIP----\n");
+        //Each gossip consists of the following:
+        //[SenderID:ServerID Heartbeat ReceivedTime Failed?, ServerID Heartbeat ReceivedTime Failed? etc...]
+        for(String gossipTable:gossip) {
+            String[] idAndTable = gossipTable.split(":");
+            result.append("Sender ID: ").append(idAndTable[0]).append('\n');
+            result.append("\tServerID Heartbeat TimeReceived\n");// Failed?\n");
+
+            String[] lines = idAndTable[1].split(",");
+            for(String line: lines) {
+                String[] lineArr = line.split(" ");
+                result.append('\t').append(lineArr[0]).append("        ")
+                        .append(lineArr[1]).append("         ")
+                        .append(lineArr[2]).append("            \n");
+                //.append(lineArr[3]).append('\n');
+            }
+        }
+        result.append('\n');
+        return result.toString();
+    }
+
+    class GossipHandler implements HttpHandler {
+        public void handle(HttpExchange t) throws IOException {
+            byte[] message = getGossip().getBytes();
+            t.sendResponseHeaders(200, message.length);
+            OutputStream os = t.getResponseBody();
+            os.write(message);
+            os.close();
+        }
+    }
+
+
 
 
 
