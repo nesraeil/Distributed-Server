@@ -41,10 +41,6 @@ public class ZooKeeperLeaderElection {
         //Loop, exchanging notifications with other servers until we find a leader
         Map<Long, Vote> votes = new HashMap<>();
         while (this.myPeerServer.getPeerState() == LOOKING || this.myPeerServer.getPeerState() == OBSERVING) {
-            if(this.myPeerServer.getPeerState() == OBSERVING) {
-                System.out.println("still looking for leader");
-            }
-
             //Remove next notification from queue, timing out after 2 times the termination time
             Message m = messageBackoff();
 
@@ -111,18 +107,6 @@ public class ZooKeeperLeaderElection {
                             //If not, set my own state to either LEADING (if I won the election) or FOLLOWING (if someone else won the election) and exit the election
                             return acceptElectionWinner(electNoti);
                         }
-
-
-
-                        /*Vote newVote = new Vote(electNoti.leader, electNoti.peerEpoch);
-                        if (electNoti.peerEpoch == proposedEpoch &&  newVoteSupersedesCurrent(electNoti.leader, electNoti.peerEpoch, proposedLeader, proposedEpoch)) {
-                            //if so, accept the election winner. I don't count who voted for who, since as I receive them I will
-                            // automatically change my vote to the highest sid, as will everyone else.
-                            //As, once someone declares a winner, we are done. We are not worried about / accounting for misbehaving peers.
-                            proposedLeader = electNoti.leader;
-                            proposedEpoch = electNoti.peerEpoch;
-                            votes.put(electNoti.sid, newVote);
-                        }*/
 
                         //ELSE: if n is from a later election epoch and/or there are not enough votes in my epoch...
                         //...before joining their established ensemble, verify that a majority are following the same leader.from that epoch
