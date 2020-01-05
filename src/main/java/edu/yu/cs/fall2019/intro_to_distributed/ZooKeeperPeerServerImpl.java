@@ -186,6 +186,7 @@ public class ZooKeeperPeerServerImpl implements ZooKeeperPeerServer
     //Check this
     @Override
     public void setPeerState(ServerState newState) {
+        System.out.println(id + ": switching from " + state + " to " + newState);
         this.state = newState;
     }
 

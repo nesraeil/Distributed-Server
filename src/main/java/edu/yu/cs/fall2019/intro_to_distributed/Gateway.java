@@ -127,12 +127,15 @@ public class Gateway implements ZooKeeperPeerServer {
 
         while (!shutdown) {
             if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID())) {
+                peerEpoch++;
                 setCurrentLeader(lookForLeader());
+                peerEpoch = currentLeader.getPeerEpoch();
+
             }
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
             try {
-                work = workFromClientBuff.poll(200, TimeUnit.MILLISECONDS);
+                work = workFromClientBuff.poll(10, TimeUnit.MILLISECONDS);
                 if(work != null) {
                     requestID++;
                     try {

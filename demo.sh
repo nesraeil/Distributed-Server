@@ -1,3 +1,4 @@
+exec > >(tee "output.txt") 2>&1
 #Step 1
 mvn test
 
@@ -10,22 +11,22 @@ do
 done
 
 #Step 3
-sleep 1s
-curl http://localhost:9999/getleader
+sleep 2s
+curl -s http://localhost:9999/getleader
 
 #Step 4
 for i in {0..8}
 do
 	string='public class HelloWorld {public void run() {System.out.print("Hello System.out world '$i'!\n");System.err.print("Hello System.err world '$i'!\n");}}'
 	echo $string
-	curl http://localhost:9999/compileandrun -d "$string"
+	curl -s http://localhost:9999/compileandrun -d "$string"
 done
 
 #Step 5
 echo "killing server 3"
 kill "${arr[3]}"
-sleep 6s
-curl http://localhost:9999/getleader
+sleep 7s
+curl -s http://localhost:9999/getleader
 
 #Step 6
 pids=()
@@ -33,7 +34,7 @@ for i in {0..8}
 do
 	string='public class HelloWorld {public void run() {System.out.print("Hello System.out world '$i'!\n");System.err.print("Hello System.err world '$i'!\n");}}'
 	echo $string
-	curl http://localhost:9999/compileandrun -d "$string" &
+	curl -s http://localhost:9999/compileandrun -d "$string" &
 	pids+=($!)
 done
 
@@ -41,29 +42,29 @@ done
 sleep 1s
 echo "Killing leader"
 kill -9 "${arr[7]}"
-sleep 6
-curl http://localhost:9999/getleader
+sleep 7s
+curl -s http://localhost:9999/getleader
 
 # Step 8
 for i in {0..1}
 do
 	string='public class HelloWorld {public void run() {System.out.print("Hello System.out world '$i'!\n");System.err.print("Hello System.err world '$i'!\n");}}'
 	echo $string
-	curl http://localhost:9999/compileandrun -d "$string"
+	curl -s http://localhost:9999/compileandrun -d "$string"
 done
 
 
 # Step 9
+echo "Making sure the 9 processes no longer exist"
 for i in "${pids[@]}"
 do
-	if ps "$i" > /dev/null
-	then
-	#This should never happen
-		echo "Killing PID$i"
-		kill -9 "$i"
-	else 
-		echo "PID$i no longer exists"
-	fi
+	# if ps "$i" > /dev/null &
+	# then
+	echo "Killing PID$i"
+	kill -9 "$i"
+	# else 
+		# echo "Process $i doesn't exist"
+	# fi
 done
 
 # Step 10
@@ -71,17 +72,18 @@ done
 #This is because it is not possible to open a HttpServer for incoming http requests 
 #while the TCP server is running for communication between the servers. This is also
 #why the gateway's external facing server is 9999 and its peerserver facing one is 8000
+
 #Gateway
-curl http://localhost:9999/getgossip
+curl -s http://localhost:9999/getgossip
 #Server 1
-curl http://localhost:8011/getgossip
+curl -s http://localhost:8011/getgossip
 #Server 2
-curl http://localhost:8021/getgossip
+curl -s http://localhost:8021/getgossip
 #Server 4
-curl http://localhost:8041/getgossip
+curl -s http://localhost:8041/getgossip
 #Server 5
-curl http://localhost:8051/getgossip
+curl -s http://localhost:8051/getgossip
 #Server 6
-curl http://localhost:8061/getgossip
+curl -s http://localhost:8061/getgossip
 
 pkill java
