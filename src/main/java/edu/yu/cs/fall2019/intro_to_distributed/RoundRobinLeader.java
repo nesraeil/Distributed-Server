@@ -8,7 +8,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 class RoundRobinLeader {
     //Hardcoded gateway address
-    private InetSocketAddress GATEWAYADDRESS = new InetSocketAddress("localhost", 8000);
+    private InetSocketAddress GATEWAYADDRESS = new InetSocketAddress("localhost", Config.GTWYINTRNL);
 
     private ZooKeeperPeerServer leader;
     private LinkedBlockingQueue<Message> incomingMessagesTCP;

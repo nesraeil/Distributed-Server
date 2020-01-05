@@ -19,7 +19,7 @@ import static edu.yu.cs.fall2019.intro_to_distributed.Util.startAsDaemon;
 
 public class Gateway implements ZooKeeperPeerServer {
 
-    private final int GATEWAYPORT = 9999;
+    private final int GATEWAYPORT;
 
     private final int myPort;
     private long peerEpoch;
@@ -54,6 +54,7 @@ public class Gateway implements ZooKeeperPeerServer {
 
 
     public Gateway(int myPort, long peerEpoch, long id, HashMap<Long, InetSocketAddress> peerIDtoAddress) {
+        this.GATEWAYPORT = Config.GTWYEXTRNL;
         this.myPort = myPort;
         this.peerEpoch = peerEpoch;
         this.id = id;

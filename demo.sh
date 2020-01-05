@@ -67,6 +67,10 @@ do
 done
 
 # Step 10
+#All of the "getgossip" ports are one port off from the server's actual ports
+#This is because it is not possible to open a HttpServer for incoming http requests 
+#while the TCP server is running for communication between the servers. This is also
+#why the gateway's external facing server is 9999 and its peerserver facing one is 8000
 #Gateway
 curl http://localhost:9999/getgossip
 #Server 1
