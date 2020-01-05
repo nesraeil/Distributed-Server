@@ -59,6 +59,7 @@ public class ZooKeeperLeaderElection {
                             proposedLeader = electNoti.leader;
                             proposedEpoch = electNoti.peerEpoch;
                             sendNotifications();
+                        } else {
                         }
                         //...while keeping track of the votes I received and who I received them from
                         Vote messageVote = new Vote(electNoti.leader, electNoti.peerEpoch);
@@ -85,7 +86,11 @@ public class ZooKeeperLeaderElection {
                         //IF: see if the sender's vote allows me to reach a conclusion based on the election epoch that I'm in, i.e. give
                         // the majority to some peer among the set of votes in my epoch.
                         Vote newVote = new Vote(electNoti.leader, electNoti.peerEpoch);
-                        votes.put(electNoti.sid, newVote);
+                        if (newVoteSupersedesCurrent(electNoti.leader, electNoti.peerEpoch, proposedLeader, proposedEpoch)) {
+                            proposedLeader = electNoti.leader;
+                            proposedEpoch = electNoti.peerEpoch;
+                            votes.put(electNoti.sid, newVote);
+                        }
 
                         //if so, accept the election winner. I don't count who voted for who, since as I receive them I will
                         // automatically change my vote to the highest sid, as will everyone else.
