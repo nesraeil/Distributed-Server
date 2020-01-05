@@ -41,6 +41,9 @@ public class ZooKeeperLeaderElection {
         //Loop, exchanging notifications with other servers until we find a leader
         Map<Long, Vote> votes = new HashMap<>();
         while (this.myPeerServer.getPeerState() == LOOKING || this.myPeerServer.getPeerState() == OBSERVING) {
+            if(this.myPeerServer.getPeerState() == OBSERVING) {
+                System.out.println("still looking for leader");
+            }
 
             //Remove next notification from queue, timing out after 2 times the termination time
             Message m = messageBackoff();
@@ -59,7 +62,6 @@ public class ZooKeeperLeaderElection {
                             proposedLeader = electNoti.leader;
                             proposedEpoch = electNoti.peerEpoch;
                             sendNotifications();
-                        } else {
                         }
                         //...while keeping track of the votes I received and who I received them from
                         Vote messageVote = new Vote(electNoti.leader, electNoti.peerEpoch);
@@ -85,21 +87,47 @@ public class ZooKeeperLeaderElection {
                     case LEADING: //if the sender is following a leader already or thinks it is the leader
                         //IF: see if the sender's vote allows me to reach a conclusion based on the election epoch that I'm in, i.e. give
                         // the majority to some peer among the set of votes in my epoch.
-                        Vote newVote = new Vote(electNoti.leader, electNoti.peerEpoch);
+
+                        long myEpoch = proposedEpoch;
                         if (newVoteSupersedesCurrent(electNoti.leader, electNoti.peerEpoch, proposedLeader, proposedEpoch)) {
                             proposedLeader = electNoti.leader;
                             proposedEpoch = electNoti.peerEpoch;
-                            votes.put(electNoti.sid, newVote);
                         }
 
-                        //if so, accept the election winner. I don't count who voted for who, since as I receive them I will
-                        // automatically change my vote to the highest sid, as will everyone else.
-                        //As, once someone declares a winner, we are done. We are not worried about / accounting for misbehaving peers.
+                        Vote newVote = new Vote(electNoti.leader, electNoti.peerEpoch);
+
+                        votes.put(electNoti.sid, newVote);
+
+                        Vote myVote = getVote();
+                        if (haveEnoughVotes(votes, myVote)) {
+                            //check if there are any new votes for a higher ranked possible leader before I declare a leader. If so,continue in my election Loop
+                            while (incomingMessages.peek() != null) {
+                                if (messageToElectNoti(incomingMessages.peek()).leader > proposedLeader) {
+                                    continue;
+                                } else {
+                                    incomingMessages.poll();
+                                }
+                            }
+                            //If not, set my own state to either LEADING (if I won the election) or FOLLOWING (if someone else won the election) and exit the election
+                            return acceptElectionWinner(electNoti);
+                        }
+
+
+
+                        /*Vote newVote = new Vote(electNoti.leader, electNoti.peerEpoch);
+                        if (electNoti.peerEpoch == proposedEpoch &&  newVoteSupersedesCurrent(electNoti.leader, electNoti.peerEpoch, proposedLeader, proposedEpoch)) {
+                            //if so, accept the election winner. I don't count who voted for who, since as I receive them I will
+                            // automatically change my vote to the highest sid, as will everyone else.
+                            //As, once someone declares a winner, we are done. We are not worried about / accounting for misbehaving peers.
+                            proposedLeader = electNoti.leader;
+                            proposedEpoch = electNoti.peerEpoch;
+                            votes.put(electNoti.sid, newVote);
+                        }*/
+
                         //ELSE: if n is from a later election epoch and/or there are not enough votes in my epoch...
                         //...before joining their established ensemble, verify that a majority are following the same leader.from that epoch
                         //if so, accept their leader. If not, keep looping on the election loop.
-                        if (haveEnoughVotes(votes, newVote) ||
-                                (newVote.getPeerEpoch() >= proposedEpoch && haveEnoughVotes(mapOfNewestEpochVotes(votes, electNoti), newVote))) {
+                        if (electNoti.peerEpoch > myEpoch && haveEnoughVotes(mapOfNewestEpochVotes(votes, electNoti.peerEpoch), newVote)) {
                             proposedEpoch = electNoti.peerEpoch;
                             proposedLeader = electNoti.leader;
                             return acceptElectionWinner(electNoti);
@@ -188,13 +216,13 @@ public class ZooKeeperLeaderElection {
                 inFavor++;
             }
         }
-        return this.myPeerServer.getQuorumSize() <= inFavor;
+        return inFavor >= this.myPeerServer.getQuorumSize();
     }
 
-    private Map<Long, Vote> mapOfNewestEpochVotes(Map<Long, Vote> map, ElectionNotification e) {
+    private Map<Long, Vote> mapOfNewestEpochVotes(Map<Long, Vote> map, long newEpoch) {
         Map<Long, Vote> result = new HashMap<>();
         for (Map.Entry<Long, Vote> entry : map.entrySet()) {
-            if (e.peerEpoch ==  entry.getValue().getPeerEpoch()) {
+            if (newEpoch ==  entry.getValue().getPeerEpoch()) {
                 result.put(entry.getKey(), entry.getValue());
             }
         }

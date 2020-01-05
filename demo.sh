@@ -1,6 +1,6 @@
 exec > >(tee "output.txt") 2>&1
 #Step 1
-mvn test
+mvn clean test
 
 #Step 2
 arr=()

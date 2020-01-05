@@ -130,7 +130,6 @@ public class Gateway implements ZooKeeperPeerServer {
                 peerEpoch++;
                 setCurrentLeader(lookForLeader());
                 peerEpoch = currentLeader.getPeerEpoch();
-
             }
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
