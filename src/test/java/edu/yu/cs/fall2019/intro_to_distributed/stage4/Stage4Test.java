@@ -110,10 +110,10 @@ public class Stage4Test
         }
         //Leader could sometimes end up as 5 if 6 is too slow to join the election and everyone already decides that 5 is the leader
         //If so, 6 will yield to the new epoch's leader
-        assertEquals(gateway.getCurrentLeader().getCandidateID() == 6 || gateway.getCurrentLeader().getCandidateID() == 5, true);
+        assertTrue(gateway.getCurrentLeader().getCandidateID() == 6 || gateway.getCurrentLeader().getCandidateID() == 5);
     }
 
-
+    @SuppressWarnings("unchecked")
     private static void createServers()
     {
         //create IDs and addresses
@@ -144,7 +144,7 @@ public class Stage4Test
             e.printStackTrace();
         }
     }
-    public static void stopServers()
+    private static void stopServers()
     {
         for (ZooKeeperPeerServer server : servers)
         {
