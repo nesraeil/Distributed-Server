@@ -113,6 +113,7 @@ public class Stage4Test
         assertTrue(gateway.getCurrentLeader().getCandidateID() == 6 || gateway.getCurrentLeader().getCandidateID() == 5);
     }
 
+    //The unsafe cast was supplied by prof. diament, and I did not see another way to do it
     @SuppressWarnings("unchecked")
     private static void createServers()
     {
