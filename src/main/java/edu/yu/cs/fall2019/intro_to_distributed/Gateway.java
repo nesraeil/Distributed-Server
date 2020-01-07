@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -121,10 +122,9 @@ public class Gateway implements ZooKeeperPeerServer {
         startAsDaemon(senderWorkerUDP, "UDP sender thread for " + this.myAddress.getPort());
         startAsDaemon(receiverWorkerUDP, "UDP receiving thread for " + this.myAddress.getPort());
         startAsDaemon(senderWorkerTCP, "TCP sender thread for " + this.myAddress.getPort());
-        startAsDaemon(receiverWorkerTCP, "TCP receiving thread for " + this.myAddress.getPort());
+        startAsDaemon(receiverWorkerTCP, "TCP receiver thread for " + this.myAddress.getPort());
         httpServer.start();
         startAsDaemon(heart, "heartbeat thread for " + this.myAddress.getPort());
-
         while (!shutdown) {
             if(currentLeader == null || !peerIDtoAddress.containsKey(currentLeader.getCandidateID())) {
                 peerEpoch++;
@@ -133,16 +133,17 @@ public class Gateway implements ZooKeeperPeerServer {
             }
             //Try to send out next thing in incoming work queue
             ClientRequest work = null;
+
             try {
                 work = workFromClientBuff.poll(10, TimeUnit.MILLISECONDS);
                 if(work != null) {
-                    requestID++;
                     try {
-                        sendMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
-                    } catch (Exception e) {
-                        requestID--;
+                        requestID++;
+                        sendTCPMessage(Message.MessageType.WORK, work.requestBody, peerIDtoAddress.get(currentLeader.getCandidateID()));
+                    } catch (IOException e) {
                         workFromClientBuff.offer(work);
-                        e.printStackTrace();
+                        Thread.sleep(10);
+                        //e.printStackTrace();
                         continue;
                     }
                     requestIdToWork.put(requestID,work);
@@ -201,7 +202,7 @@ public class Gateway implements ZooKeeperPeerServer {
     }
 
     @Override
-    public void sendMessage(Message.MessageType type, byte[] messageContents, InetSocketAddress target) throws IllegalArgumentException {
+    public void sendMessage(Message.MessageType type, byte[] messageContents, InetSocketAddress target) {
         if (type == Message.MessageType.ELECTION || type == Message.MessageType.HEARTBEAT || type == Message.MessageType.GOSSIP) {
             Message m = new Message(type, messageContents, myAddress.getHostName(), myAddress.getPort(), target.getHostName(), target.getPort());
             outgoingUDP.offer(m);
@@ -253,7 +254,7 @@ public class Gateway implements ZooKeeperPeerServer {
 
     @Override
     public InetSocketAddress getPeerByID(long id) {
-        return null;
+        return peerIDtoAddress.get(id);
     }
 
     @Override
@@ -330,7 +331,7 @@ public class Gateway implements ZooKeeperPeerServer {
         }
     }
 
-    String getGossip() {
+    private String getGossip() {
         ArrayList<String> gossip = heart.getGossip();
         StringBuilder result = new StringBuilder();
         result.append("----SERVER ").append(id).append("'s GOSSIP----\n");
@@ -352,5 +353,17 @@ public class Gateway implements ZooKeeperPeerServer {
         }
         result.append('\n');
         return result.toString();
+    }
+
+    private void sendTCPMessage(Message.MessageType type, byte[] messageContents, InetSocketAddress target) throws IOException {
+        Message m = new Message(type, messageContents, myAddress.getHostName(), myAddress.getPort(), target.getHostName(), target.getPort(), requestID);
+        if(m != null)
+        {
+            Socket socket= new Socket(m.getReceiverHost(), m.getReceiverPort());
+            OutputStream os =  socket.getOutputStream();
+            os.write(m.getNetworkPayload());
+            os.close();
+            socket.close();
+        }
     }
 }

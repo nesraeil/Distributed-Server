@@ -1,9 +1,13 @@
 package edu.yu.cs.fall2019.intro_to_distributed;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 
 class RoundRobinLeader {
@@ -43,8 +47,13 @@ class RoundRobinLeader {
 
     void start() {
         while(!shutdown) {
-            if(incomingMessagesTCP.peek() != null) {
-                Message message = incomingMessagesTCP.poll();
+            Message message = null;
+            try {
+                message = incomingMessagesTCP.poll(10, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            if(message != null) {
                 switch (message.getMessageType()) {
                     case WORK://Sending work to peer servers on round robin basis
                         //If the iterator is done, restart
@@ -73,10 +82,6 @@ class RoundRobinLeader {
                         break;
                 }
 
-            } else {
-                try {
-                    Thread.sleep(10);
-                } catch (Exception e){}
             }
             checkUDPQueue();
             resendDeadServerWork();
@@ -150,14 +155,25 @@ class RoundRobinLeader {
         outgoingMessagesTCP.offer(work);
     }
 
-    private void sendWork(Message message, InetSocketAddress worker) {
-        Message work = new Message(message.getMessageType(),
-                message.getMessageContents(),
+    private void sendWork(Message m, InetSocketAddress worker) {
+        Message work = new Message(m.getMessageType(),
+                m.getMessageContents(),
                 leader.getMyAddress().getHostName(),
                 leader.getMyAddress().getPort(),
                 worker.getHostName(),
-                worker.getPort(),message.getRequestID());
-        outgoingMessagesTCP.offer(work);
+                worker.getPort(),m.getRequestID());
+
+        try {
+            Socket socket= new Socket(work.getReceiverHost(), work.getReceiverPort());
+            OutputStream os =  socket.getOutputStream();
+            os.write(work.getNetworkPayload());
+            os.close();
+            socket.close();
+        } catch (IOException e) {
+            //If unable to send, that means the server is dead
+            //and the leader will resend the message when it finds out
+        }
+        //outgoingMessagesTCP.offer(work);
     }
 
     private void checkUDPQueue() {

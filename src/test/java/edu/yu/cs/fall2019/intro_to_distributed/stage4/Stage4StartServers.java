@@ -7,13 +7,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Stage4Test
+public class Stage4StartServers
 {
-    private int[] ports = {8010, 8020, 8030, 8040, 8050, 8060, 8070, 8080, 8090};
-    private int GATEWAYPORT = 8010;//Hardcoded
+    private int[] ports = {8000, 8010, 8020, 8030, 8040, 8050, 8060, 8070, 8080};
+    private int GATEWAYPORT = Config.GTWYINTRNL;//Hardcoded
     private ArrayList<ZooKeeperPeerServer> servers;
 
-    public Stage4Test() throws Exception{
+    public Stage4StartServers() throws Exception{
         //Step 1: Create Servers
         createServers();
 
@@ -70,6 +70,6 @@ public class Stage4Test
     }
 
     public static void main(String[] args) throws Exception {
-        new Stage4Test();
+        new Stage4StartServers();
     }
 }

@@ -2,9 +2,12 @@ package edu.yu.cs.fall2019.intro_to_distributed;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 class JavaRunnerFollower
 {
@@ -43,10 +46,11 @@ class JavaRunnerFollower
                 workerServer.setPeerState(ZooKeeperPeerServer.ServerState.LOOKING);
                 shutdown();
             }
-            if(incomingMessagesTCP.peek() != null) {
-
-
-                Message message = incomingMessagesTCP.poll();
+            Message message = null;
+            try {
+                 message = incomingMessagesTCP.poll(10, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {}
+            if(message != null) {
                 switch (message.getMessageType()) {
                     case WORK:
                         try {
@@ -56,21 +60,18 @@ class JavaRunnerFollower
                                 incomingMessagesTCP.offer(message);
                                 workerServer.setPeerState(ZooKeeperPeerServer.ServerState.LOOKING);
                                 shutdown();
-                            }else {
+                            } else {
                                 sendResponse(result,leader, message.getRequestID());
                             }
                         } catch (IOException e) {
-                            //TODO
+                            incomingMessagesTCP.offer(message);
                         }
                         break;
                 }
-            } else {
-                try {
-                    Thread.sleep(10);
-                } catch (Exception e){}
             }
             checkUDPQueue();
         }
+
     }
 
     private boolean leaderIsDead() {
@@ -97,7 +98,7 @@ class JavaRunnerFollower
         }
     }
 
-    private void sendResponse(String result, long leader, long requestID) {
+    private void sendResponse(String result, long leader, long requestID) throws IOException {
         Message work = new Message(Message.MessageType.COMPLETED_WORK,
                 result.getBytes(),
                 workerServer.getMyAddress().getHostName(),
@@ -105,7 +106,13 @@ class JavaRunnerFollower
                 workerServer.getPeerByID(leader).getHostName(),
                 workerServer.getPeerByID(leader).getPort(),
                 requestID);
-        outgoingMessagesTCP.offer(work);
+
+        Socket socket= new Socket(work.getReceiverHost(), work.getReceiverPort());
+        OutputStream os =  socket.getOutputStream();
+        os.write(work.getNetworkPayload());
+        os.close();
+        socket.close();
+        //outgoingMessagesTCP.offer(work);
     }
 
     void shutdown() {
