@@ -104,11 +104,13 @@ public class Stage4Test
     {
         servers.get(7).shutdown();
         try {
-            Thread.sleep(6000);
+            Thread.sleep(7000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals(6, gateway.getCurrentLeader().getCandidateID());
+        //Leader could sometimes end up as 5 if 6 is too slow to join the election and everyone already decides that 5 is the leader
+        //If so, 6 will yield to the new epoch's leader
+        assertEquals(gateway.getCurrentLeader().getCandidateID() == 6 || gateway.getCurrentLeader().getCandidateID() == 5, true);
     }
 
 
