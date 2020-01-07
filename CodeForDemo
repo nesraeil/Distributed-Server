@@ -1,6 +1,0 @@
-public class HelloWorld {
-	public void run() {
-		System.out.print("Hello System.out world!\n");
-		System.err.print("Hello System.err world!\n");
-	}
-}

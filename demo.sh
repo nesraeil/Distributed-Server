@@ -14,6 +14,7 @@ done
 
 #Step 3
 echo
+#Adapted this method from https://serverfault.com/questions/848637/bash-script-loop-until-webserver-response-200
 HTTPD=`curl -A "" -sL --connect-timeout 3 -w "%{http_code}\n" "http://localhost:9999/getleader" -o /dev/null`
 curl -s http://localhost:9999/getleader
 until [ "$HTTPD" == "200" ]; do
