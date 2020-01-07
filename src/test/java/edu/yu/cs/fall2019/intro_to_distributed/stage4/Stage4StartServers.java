@@ -28,6 +28,7 @@ public class Stage4StartServers
         printLeaders();
     }
 
+    //The unsafe cast was supplied by prof. diament, and I did not see another way to do it
     @SuppressWarnings("unchecked")
     private void createServers()
     {
